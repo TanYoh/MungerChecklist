@@ -39,6 +39,9 @@ android {
         compose = true
     }
 }
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
 
 dependencies {
     implementation(libs.androidx.core.ktx)
@@ -65,4 +68,10 @@ dependencies {
     ksp("androidx.room:room-compiler:$room_version")
     // 【新增】：Gson 解析，用于将复杂的案例列表转换为文本存入数据库
     implementation("com.google.code.gson:gson:2.10.1")
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
 }
