@@ -31,7 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.GenericShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -197,13 +197,13 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
                                 // 绘制逻辑：底部完全封死，顶部呈椭圆弧形
                                 moveTo(0f, size.height)      // 1. 左下角
                                 lineTo(size.width, size.height) // 2. 连到右下角
-                                lineTo(size.width, size.height * 0.5f) // 3. 连到右侧边缘中点
+                                lineTo(size.width, size.height * 0.4f) // 3. 连到右侧边缘中点
 
                                 // 4. 核心：画一条优美的椭圆弧线连接到左侧中点
                                 // 控制点设在屏幕水平中心且垂直坐标为负数，确保弧顶圆润且覆盖全宽
                                 quadraticTo(
-                                    size.width / 2f, -size.height * 0.2f,
-                                    0f, size.height * 0.5f
+                                    size.width / 2f, -size.height * 0f,
+                                    0f, size.height * 0.4f
                                 )
                                 close()
                             }
