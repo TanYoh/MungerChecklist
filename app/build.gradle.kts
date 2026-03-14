@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("org.jetbrains.kotlin.android")
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.ksp)
 }
@@ -41,6 +42,7 @@ android {
 }
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.generateKotlin", "true") // 【新增此行】：强制生成纯 Kotlin 代码，彻底消灭 Java 签名 Bug
 }
 
 dependencies {
