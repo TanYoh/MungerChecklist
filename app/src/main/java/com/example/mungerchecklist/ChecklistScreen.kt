@@ -29,12 +29,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.GenericShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.LocalDensity
+
+
 
 // 【飞行员警报：硬核、严肃、实用的芒格专属色板】
 object ChecklistColors {
@@ -55,6 +60,7 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var categoryToDelete by remember { mutableStateOf<Category?>(null) } // 【新增】暂存准备删除的对象
 
     val filteredModels = remember(searchQuery, models) {
         if (searchQuery.isBlank()) models else models.filter { model ->
@@ -72,103 +78,183 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
     }
 
     val listState = rememberLazyListState()
-    val dragDropState = rememberDragDropState(listState) { fromIndex, toIndex ->
-        viewModel.moveCategory(fromIndex, toIndex)
-    }
+    val dragDropState = rememberDragDropState(
+        lazyListState = listState,
+        onMove = { fromIndex, toIndex -> viewModel.moveCategory(fromIndex, toIndex) },
+        onDropToDelete = { index ->
+            // 【新增】拖拽到垃圾桶松手后，调起确认弹窗
+            categoryToDelete = filteredCategories.getOrNull(index)
+        }
+    )
 
     Scaffold(
         topBar = {
             TopAppBar(
-                modifier = Modifier.height(88.dp), // 【核心修改】：通过 Modifier 强制加厚顶栏到 88dp
+                modifier = Modifier.height(88.dp),
                 title = {
-                    Column(
-                        modifier = Modifier.fillMaxHeight(),
-                        verticalArrangement = Arrangement.Center // 确保文字在加厚的顶栏中垂直居中
-                    ) {
-                        Text(
-                            text = "芒格检查清单",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 24.sp, // 【核心修改】：字号同步放大，撑住厚重的顶栏
-                            color = Color.White
-                        )
+                    Column(modifier = Modifier.fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+                        Text(text = "芒格检查清单", fontWeight = FontWeight.Black, fontSize = 24.sp, color = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ChecklistColors.AlertCrimson,
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = ChecklistColors.AlertCrimson)
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = ChecklistColors.AlertCrimson,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(12.dp)
+            // 【修改】当发生拖拽时，自动隐藏加号悬浮窗
+            AnimatedVisibility(
+                visible = dragDropState.draggingItemIndex == null,
+                enter = fadeIn(),
+                exit = fadeOut()
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "新增模型")
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = ChecklistColors.AlertCrimson,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "新增模型")
+                }
             }
         }
     ) { innerPadding ->
-        Column(
+        // 【新增】用 Box 包裹，方便在底部放置拖拽销毁区
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(ChecklistColors.BackgroundParchment)
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                placeholder = { Text("检索防错原则...", color = Color.Gray, fontSize = 14.sp) },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索", tint = ChecklistColors.SlateGrey) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "清空", tint = Color.Gray)
+            Column(modifier = Modifier.fillMaxSize()) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    placeholder = { Text("检索防错原则...", color = Color.Gray, fontSize = 14.sp) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索", tint = ChecklistColors.SlateGrey) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                Icon(Icons.Filled.Clear, contentDescription = "清空", tint = Color.Gray)
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedBorderColor = ChecklistColors.AlertCrimson,
+                        unfocusedBorderColor = ChecklistColors.BorderLight
+                    )
+                )
+
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (searchQuery.isEmpty()) dragDropState.pointerInputModifier else Modifier)
+                ) {
+                    itemsIndexed(items = filteredCategories, key = { _, category -> category.id }) { index, category ->
+                        val isDragging = dragDropState.draggingItemIndex == index
+                        val dragOffset = if (isDragging) dragDropState.draggingItemOffset else 0f
+
+                        Box(
+                            modifier = Modifier
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer { translationY = dragOffset }
+                        ) {
+                            val categoryModels = filteredModels.filter { it.categoryId == category.id }
+                            CategoryCard(
+                                category = category,
+                                models = categoryModels,
+                                onDelete = { modelId -> viewModel.deleteModel(modelId) },
+                                onDeleteExample = { modelId, exampleIndex -> viewModel.deleteExample(modelId, exampleIndex) },
+                                onAddExample = { modelId, text -> viewModel.addExample(modelId, text) },
+                                isSearchActive = searchQuery.isNotEmpty()
+                            )
                         }
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(8.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedBorderColor = ChecklistColors.AlertCrimson,
-                    unfocusedBorderColor = ChecklistColors.BorderLight
-                )
-            )
+                }
+            }
 
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (searchQuery.isEmpty()) dragDropState.pointerInputModifier else Modifier)
+            // 【升级版】底部椭圆形弧面销毁区
+            AnimatedVisibility(
+                visible = dragDropState.draggingItemIndex != null,
+                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
             ) {
-                itemsIndexed(items = filteredCategories, key = { _, category -> category.id }) { index, category ->
-                    val isDragging = dragDropState.draggingItemIndex == index
-                    val dragOffset = if (isDragging) dragDropState.draggingItemOffset else 0f
+                val isOver = dragDropState.isOverDeleteZone
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp) // 增加高度，给椭圆弧度留出足够的生长空间
+                        .graphicsLayer {
+                            clip = true
+                            shape = GenericShape { size, _ ->
+                                // 绘制逻辑：底部完全封死，顶部呈椭圆弧形
+                                moveTo(0f, size.height)      // 1. 左下角
+                                lineTo(size.width, size.height) // 2. 连到右下角
+                                lineTo(size.width, size.height * 0.5f) // 3. 连到右侧边缘中点
 
-                    Box(
-                        modifier = Modifier
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .graphicsLayer { translationY = dragOffset }
+                                // 4. 核心：画一条优美的椭圆弧线连接到左侧中点
+                                // 控制点设在屏幕水平中心且垂直坐标为负数，确保弧顶圆润且覆盖全宽
+                                quadraticTo(
+                                    size.width / 2f, -size.height * 0.2f,
+                                    0f, size.height * 0.5f
+                                )
+                                close()
+                            }
+                        }
+                        // 动态切换颜色：检测到卡片进入时加深红色
+                        .background(if (isOver) Color(0xFFB91C1C) else Color(0xFFEF4444).copy(alpha = 0.95f)),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Row(
+                        modifier = Modifier.padding(bottom = 36.dp), // 将文字抬高，使其处于椭圆弧形的视觉中心
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val categoryModels = filteredModels.filter { it.categoryId == category.id }
-                        CategoryCard(
-                            category = category,
-                            models = categoryModels,
-                            onDelete = { modelId -> viewModel.deleteModel(modelId) },
-                            onDeleteExample = { modelId, exampleIndex -> viewModel.deleteExample(modelId, exampleIndex) },
-                            onAddExample = { modelId, text -> viewModel.addExample(modelId, text) },
-                            isSearchActive = searchQuery.isNotEmpty()
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (isOver) "立即释放以销毁" else "拖动到此维度销毁",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp
                         )
                     }
                 }
             }
+        }
+
+        // 【新增】全局防误触确认弹窗
+        categoryToDelete?.let { category ->
+            AlertDialog(
+                onDismissRequest = { categoryToDelete = null },
+                containerColor = Color.White,
+                title = { Text("删除核查维度", fontWeight = FontWeight.ExtraBold, color = ChecklistColors.InkBlack) },
+                text = { Text("确定要删除【${category.name}】及其包含的所有思维模型吗？此操作无法撤销。", color = ChecklistColors.SlateGrey) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.deleteCategory(category.id)
+                        categoryToDelete = null
+                    }) {
+                        Text("确认删除", color = Color.Red, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { categoryToDelete = null }) {
+                        Text("取消", color = Color.Gray)
+                    }
+                }
+            )
         }
 
         if (showAddDialog) {
@@ -383,11 +469,15 @@ fun AddExampleDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 // ---------------- 列表底层拖拽手势核心引擎 ----------------
 class DragDropState(
     val state: LazyListState,
-    val onMove: (Int, Int) -> Unit
+    val density: Float,
+    val onMove: (Int, Int) -> Unit,
+    val onDropToDelete: (Int) -> Unit // 【新增】拖拽删除回调
 ) {
     var draggingItemIndex by mutableStateOf<Int?>(null)
         private set
     var draggingItemOffset by mutableStateOf(0f)
+        private set
+    var isOverDeleteZone by mutableStateOf(false) // 【新增】是否进入了底部删除区域
         private set
 
     val pointerInputModifier = Modifier.pointerInput(Unit) {
@@ -403,6 +493,11 @@ class DragDropState(
                 val currentIdx = draggingItemIndex ?: return@detectDragGesturesAfterLongPress
                 val currentItem = state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == currentIdx } ?: return@detectDragGesturesAfterLongPress
 
+                // 【核心计算】：判断手指是否进入了屏幕最下方 100dp 的删除区域
+                val deleteZoneHeightPx = 100 * density
+                val viewportHeight = state.layoutInfo.viewportSize.height
+                isOverDeleteZone = change.position.y > (viewportHeight - deleteZoneHeightPx)
+
                 val startOffset = currentItem.offset + draggingItemOffset
                 val middleOffset = startOffset + currentItem.size / 2f
 
@@ -410,13 +505,20 @@ class DragDropState(
                     middleOffset.toInt() in item.offset..(item.offset + item.size) && item.index != currentIdx
                 }
 
-                if (targetItem != null) {
+                // 只有在【未进入】删除区域时，才允许正常的卡片换位排序
+                if (targetItem != null && !isOverDeleteZone) {
                     onMove(currentIdx, targetItem.index)
                     draggingItemIndex = targetItem.index
                     draggingItemOffset += (currentItem.offset - targetItem.offset)
                 }
             },
-            onDragEnd = { resetDragState() },
+            onDragEnd = {
+                // 如果在删除区域松手，则触发删除回调
+                if (isOverDeleteZone && draggingItemIndex != null) {
+                    onDropToDelete(draggingItemIndex!!)
+                }
+                resetDragState()
+            },
             onDragCancel = { resetDragState() }
         )
     }
@@ -424,10 +526,16 @@ class DragDropState(
     private fun resetDragState() {
         draggingItemIndex = null
         draggingItemOffset = 0f
+        isOverDeleteZone = false
     }
 }
 
 @Composable
-fun rememberDragDropState(lazyListState: LazyListState, onMove: (Int, Int) -> Unit): DragDropState {
-    return remember { DragDropState(lazyListState, onMove) }
+fun rememberDragDropState(
+    lazyListState: LazyListState,
+    onMove: (Int, Int) -> Unit,
+    onDropToDelete: (Int) -> Unit // 【新增】
+): DragDropState {
+    val density = LocalDensity.current.density
+    return remember { DragDropState(lazyListState, density, onMove, onDropToDelete) }
 }

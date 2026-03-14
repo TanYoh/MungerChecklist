@@ -59,6 +59,9 @@ interface CategoryDao {
 
     @Query("SELECT COUNT(*) FROM categories")
     suspend fun getCategoryCount(): Int
+
+    @Query("DELETE FROM categories WHERE id = :categoryId")
+    suspend fun deleteCategoryById(categoryId: Int): Int
 }
 
 @Dao
@@ -77,6 +80,9 @@ interface MentalModelDao {
 
     @Query("SELECT COUNT(*) FROM mental_models")
     suspend fun getModelCount(): Int
+
+    @Query("DELETE FROM mental_models WHERE categoryId = :categoryId")
+    suspend fun deleteModelsByCategoryId(categoryId: Int): Int
 }
 
 // ==========================================

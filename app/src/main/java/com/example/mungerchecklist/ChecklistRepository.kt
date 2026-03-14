@@ -33,4 +33,11 @@ class ChecklistRepository(private val db: AppDatabase) {
             initialModels.forEach { insertModel(it) }
         }
     }
+
+    suspend fun deleteCategory(categoryId: Int) {
+        // 先删除该分类下的所有思维模型
+        db.mentalModelDao().deleteModelsByCategoryId(categoryId)
+        // 再删除分类本身
+        db.categoryDao().deleteCategoryById(categoryId)
+    }
 }

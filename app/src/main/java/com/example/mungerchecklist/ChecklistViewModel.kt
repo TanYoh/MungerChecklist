@@ -86,4 +86,10 @@ class ChecklistViewModel(private val repository: ChecklistRepository) : ViewMode
             repository.updateModel(model.copy(examples = newExamples))
         }
     }
+
+    fun deleteCategory(categoryId: Int) {
+        viewModelScope.launch {
+            repository.deleteCategory(categoryId)
+        }
+    }
 }
