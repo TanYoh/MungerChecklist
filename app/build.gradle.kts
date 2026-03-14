@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.kotlin.ksp)
 }
 
 android {
@@ -58,11 +58,11 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
 
-    // 【新增】：Room 本地数据库依赖
+    // Room 本地数据库依赖
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
-    add("kapt", "androidx.room:room-compiler:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
     // 【新增】：Gson 解析，用于将复杂的案例列表转换为文本存入数据库
     implementation("com.google.code.gson:gson:2.10.1")
 }
