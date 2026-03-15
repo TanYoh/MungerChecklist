@@ -29,8 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -128,7 +128,10 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.updateSearchQuery(it) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .zIndex(if (dragDropState.draggingItemIndex != null) 2f else 0f)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     placeholder = { Text("检索防错原则...", color = Color.Gray, fontSize = 14.sp) },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索", tint = ChecklistColors.SlateGrey) },
                     trailingIcon = {
@@ -159,11 +162,20 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
                     itemsIndexed(items = filteredCategories, key = { _, category -> category.id }) { index, category ->
                         val isDragging = dragDropState.draggingItemIndex == index
                         val dragOffset = if (isDragging) dragDropState.draggingItemOffset else 0f
+                        val isItemOverDeleteZone = isDragging && dragDropState.isOverDeleteZone
 
                         Box(
                             modifier = Modifier
-                                .zIndex(if (isDragging) 1f else 0f)
-                                .graphicsLayer { translationY = dragOffset }
+                                .zIndex(if (isDragging) 10f else 0f)
+                                .graphicsLayer {
+                                    translationY = dragOffset
+                                    // 【新增】：设置透明度 (0.7f - 0.8f 效果较好)
+                                    alpha = if (isItemOverDeleteZone) 0.5f else if (isDragging) 0.9f else 1f
+                                    // 【新增】：稍微放大一点，增加“悬浮”在空中的感觉
+                                    scaleX = if (isDragging) 1.05f else 1f
+                                    scaleY = if (isDragging) 1.05f else 1f
+                                }
+                                .then(if (isItemOverDeleteZone) Modifier.blur(radius = 10.dp) else Modifier)
                         ) {
                             val categoryModels = filteredModels.filter { it.categoryId == category.id }
                             CategoryCard(
@@ -184,7 +196,7 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
                 visible = dragDropState.draggingItemIndex != null,
                 enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier.align(Alignment.BottomCenter).zIndex(0f)
             ) {
                 val isOver = dragDropState.isOverDeleteZone
                 Box(
@@ -471,7 +483,7 @@ class DragDropState(
     val state: LazyListState,
     val density: Float,
     val onMove: (Int, Int) -> Unit,
-    val onDropToDelete: (Int) -> Unit // 【新增】拖拽删除回调
+    val onDropToDelete: (Int) -> Unit
 ) {
     var draggingItemIndex by mutableStateOf<Int?>(null)
         private set
@@ -494,7 +506,7 @@ class DragDropState(
                 val currentItem = state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == currentIdx } ?: return@detectDragGesturesAfterLongPress
 
                 // 【核心计算】：判断手指是否进入了屏幕最下方 100dp 的删除区域
-                val deleteZoneHeightPx = 100 * density
+                val deleteZoneHeightPx = 150 * density
                 val viewportHeight = state.layoutInfo.viewportSize.height
                 isOverDeleteZone = change.position.y > (viewportHeight - deleteZoneHeightPx)
 
@@ -534,8 +546,22 @@ class DragDropState(
 fun rememberDragDropState(
     lazyListState: LazyListState,
     onMove: (Int, Int) -> Unit,
-    onDropToDelete: (Int) -> Unit // 【新增】
+    onDropToDelete: (Int) -> Unit
 ): DragDropState {
     val density = LocalDensity.current.density
-    return remember { DragDropState(lazyListState, density, onMove, onDropToDelete) }
+
+    // 【关键修复】：使用 rememberUpdatedState 包装回调
+    // 这样在 DragDropState 的持久生命周期内，调用的永远是最新的 lambda
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentOnDropToDelete by rememberUpdatedState(onDropToDelete)
+
+    return remember {
+        DragDropState(
+            state = lazyListState,
+            density = density,
+            // 包装一层，间接调用最新的函数引用
+            onMove = { from, to -> currentOnMove(from, to) },
+            onDropToDelete = { index -> currentOnDropToDelete(index) }
+        )
+    }
 }
