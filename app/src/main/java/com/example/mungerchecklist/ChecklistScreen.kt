@@ -124,7 +124,7 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
                 .padding(innerPadding)
                 .background(ChecklistColors.BackgroundParchment)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize().zIndex(1f)) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.updateSearchQuery(it) },
@@ -170,12 +170,12 @@ fun ChecklistApp(viewModel: ChecklistViewModel) {
                                 .graphicsLayer {
                                     translationY = dragOffset
                                     // 【新增】：设置透明度 (0.7f - 0.8f 效果较好)
-                                    alpha = if (isItemOverDeleteZone) 0.5f else if (isDragging) 0.9f else 1f
+                                    alpha = if (isItemOverDeleteZone) 0.8f else if (isDragging) 0.9f else 1f
                                     // 【新增】：稍微放大一点，增加“悬浮”在空中的感觉
                                     scaleX = if (isDragging) 1.05f else 1f
                                     scaleY = if (isDragging) 1.05f else 1f
                                 }
-                                .then(if (isItemOverDeleteZone) Modifier.blur(radius = 10.dp) else Modifier)
+                                .then(if (isItemOverDeleteZone) Modifier.blur(radius = 1.dp) else Modifier)
                         ) {
                             val categoryModels = filteredModels.filter { it.categoryId == category.id }
                             CategoryCard(
